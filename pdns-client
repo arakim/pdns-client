@@ -21,6 +21,7 @@ DOMAIN=""
 ID=""
 CONTENT=""
 KEY=""
+BASIC=""
 
 exit_error() {
   echo "ERROR: ${1}" >&2
@@ -43,6 +44,7 @@ Options are:
     -i ID      Id of record to change
     -c CONTENT Content to set
     -k KEY     Private key to sign with (default pdns.private.pem)
+    -b ID:PW   ID and password for HTTP Basic authentication (optional)
 EOF
 
 exit 0
@@ -81,7 +83,7 @@ resolve_keyfile() {
 }
 
 #main
-while getopts "s:i:c:k:h" opt
+while getopts "s:i:c:k:b:h" opt
 do
     case $opt in
         s)
@@ -96,6 +98,9 @@ do
         k)
             KEY="$OPTARG"
             ;;
+        b)
+            BASIC="$OPTARG"
+            ;;
         h)
             print_help
             ;;
@@ -106,8 +111,13 @@ check_dependencies
 validate_arguments
 resolve_keyfile
 
+if [ -n "${BASIC}" ]
+then
+    BASIC="--basic --user ${BASIC}"
+fi
+
 #Get timestamp for signing
-TIME=$(curl -s ${SERVER}api/v1/remote/servertime | jq -r .time)
+TIME=$(curl -s ${BASIC} ${SERVER}api/v1/remote/servertime | jq -r .time)
 
 if [ -z $TIME ]
 then
@@ -123,7 +133,7 @@ jq -c .record="\"$ID\"" |\
 jq -c .content="\"$CONTENT\"" |\
 jq -c .time="$TIME" |\
 jq -c .signature="\"$SIGNATURE\"" |\
-curl -s --data-binary @- -H "Content-Type: application/json" "${SERVER}api/v1/remote/updatekey")
+curl -s ${BASIC} --data-binary @- -H "Content-Type: application/json" "${SERVER}api/v1/remote/updatekey")
 
 if [ ! -z "${result[@]}" ]
 then
